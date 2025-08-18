@@ -1,0 +1,506 @@
+openapi: 3.0.3
+info:
+  title: DSG Telemetry Service
+  description: AUV Telemetry Ingestion + Alert Rules Service
+  version: 1.0.0
+  contact:
+    name: DeepSea Team
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.dsg.com
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Get service information
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  status:
+                    type: string
+                  docs:
+                    type: string
+                    nullable: true
+
+  /api/telemetry/ingest:
+    post:
+      summary: Ingest telemetry data
+      description: Ingest AUV telemetry data and evaluate alert rules
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryCreate'
+      responses:
+        '201':
+          description: Telemetry ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryIngestResponse'
+        '401':
+          description: Unauthorized
+        '422':
+          description: Validation error
+        '500':
+          description: Internal server error
+
+  /api/telemetry:
+    get:
+      summary: Get telemetry data
+      description: Retrieve telemetry data with optional filtering
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: auv_id
+          in: query
+          description: AUV identifier filter
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Number of records to return
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          description: Number of records to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Telemetry data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryResponse'
+
+  /api/stream/alerts:
+    get:
+      summary: Stream alerts
+      description: Server-Sent Events stream for real-time alerts
+      parameters:
+        - name: auv_id
+          in: query
+          description: AUV identifier filter
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/stream/telemetry:
+    get:
+      summary: Stream telemetry
+      description: Server-Sent Events stream for real-time telemetry
+      parameters:
+        - name: auv_id
+          in: query
+          description: AUV identifier filter
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/exports/isa/hourly:
+    get:
+      summary: Export ISA hourly data
+      description: Export telemetry and alert data in CSV format for ISA reporting
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Start timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          description: End timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: auv_id
+          in: query
+          description: AUV identifier filter
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV export
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /api/zones:
+    get:
+      summary: Get zones
+      description: Get all zones as GeoJSON FeatureCollection
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Zones retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoJSONFeatureCollection'
+
+  /api/zones/routes:
+    get:
+      summary: Get AUV routes
+      description: Get AUV route as a series of points
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: auv_id
+          in: query
+          required: true
+          description: AUV identifier
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          description: Start timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          description: End timestamp
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Route retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+
+  /api/health/healthz:
+    get:
+      summary: Health check
+      description: Check if the service is healthy
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/health/readyz:
+    get:
+      summary: Readiness check
+      description: Check if the service is ready to accept traffic
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/health/metrics:
+    get:
+      summary: Get metrics
+      description: Get application metrics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Position:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        depth:
+          type: integer
+          minimum: 0
+        speed:
+          type: number
+          format: double
+          minimum: 0
+        heading:
+          type: integer
+          minimum: 0
+          maximum: 360
+      required:
+        - lat
+        - lng
+        - depth
+        - speed
+        - heading
+
+    Environment:
+      type: object
+      properties:
+        turbidity_ntu:
+          type: number
+          format: double
+          minimum: 0
+        sediment_mg_l:
+          type: number
+          format: double
+          minimum: 0
+        dissolved_oxygen_mg_l:
+          type: number
+          format: double
+          minimum: 0
+        temperature_c:
+          type: number
+          format: double
+      required:
+        - turbidity_ntu
+        - sediment_mg_l
+        - dissolved_oxygen_mg_l
+        - temperature_c
+
+    Plume:
+      type: object
+      properties:
+        concentration_mg_l:
+          type: number
+          format: double
+          minimum: 0
+      required:
+        - concentration_mg_l
+
+    SpeciesDetection:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        distance_m:
+          type: number
+          format: double
+          minimum: 0
+      required:
+        - name
+        - distance_m
+
+    Battery:
+      type: object
+      properties:
+        level_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        voltage_v:
+          type: number
+          format: double
+          minimum: 0
+      required:
+        - level_pct
+        - voltage_v
+
+    TelemetryCreate:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        auv_id:
+          type: string
+          minLength: 1
+          maxLength: 50
+        position:
+          $ref: '#/components/schemas/Position'
+        env:
+          $ref: '#/components/schemas/Environment'
+        plume:
+          $ref: '#/components/schemas/Plume'
+        species_detections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpeciesDetection'
+          default: []
+        battery:
+          $ref: '#/components/schemas/Battery'
+      required:
+        - timestamp
+        - auv_id
+        - position
+        - env
+        - plume
+        - battery
+
+    TelemetryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        auv_id:
+          type: string
+        position:
+          $ref: '#/components/schemas/Position'
+        env:
+          $ref: '#/components/schemas/Environment'
+        plume:
+          $ref: '#/components/schemas/Plume'
+        battery:
+          $ref: '#/components/schemas/Battery'
+        created_at:
+          type: string
+          format: date-time
+
+    TelemetryIngestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        telemetry_id:
+          type: string
+          format: uuid
+        alerts_generated:
+          type: integer
+          minimum: 0
+
+    GeoJSONFeature:
+      type: object
+      properties:
+        type:
+          type: string
+          default: Feature
+        properties:
+          type: object
+        geometry:
+          type: object
+
+    GeoJSONFeatureCollection:
+      type: object
+      properties:
+        type:
+          type: string
+          default: FeatureCollection
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeoJSONFeature'
+
+    RoutePoint:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        timestamp:
+          type: string
+          format: date-time
+
+    RouteResponse:
+      type: object
+      properties:
+        auv_id:
+          type: string
+        from_timestamp:
+          type: string
+          format: date-time
+        to_timestamp:
+          type: string
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutePoint'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        database:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    MetricsResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        streams:
+          type: object
+          properties:
+            alert_streams:
+              type: integer
+            telemetry_streams:
+              type: integer
+        uptime:
+          type: number
+          format: double
+        memory:
+          type: object
+        version:
+          type: string

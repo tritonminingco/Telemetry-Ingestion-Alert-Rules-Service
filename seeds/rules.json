@@ -1,0 +1,64 @@
+[
+  {
+    "id": "RULE-SEDIMENT-01",
+    "type": "threshold",
+    "path": "env.sediment_mg_l",
+    "operator": ">",
+    "value": 25,
+    "severity": "high",
+    "dedupe_window_sec": 300
+  },
+  {
+    "id": "RULE-DO-01",
+    "type": "threshold",
+    "path": "env.dissolved_oxygen_mg_l",
+    "operator": "<",
+    "value": 6.0,
+    "severity": "medium",
+    "dedupe_window_sec": 300
+  },
+  {
+    "id": "RULE-BATT-01",
+    "type": "threshold",
+    "path": "battery.level_pct",
+    "operator": "<",
+    "value": 30,
+    "severity": "medium",
+    "dedupe_window_sec": 600
+  },
+  {
+    "id": "RULE-SPECIES-01",
+    "type": "proximity",
+    "path": "species_detections[].distance_m",
+    "operator": "<",
+    "value": 150,
+    "severity": "high",
+    "dedupe_window_sec": 600
+  },
+  {
+    "id": "RULE-ZONE-01",
+    "type": "zone_dwell",
+    "zone_type": "sensitive",
+    "max_minutes": 60,
+    "severity": "medium",
+    "dedupe_window_sec": 1800
+  },
+  {
+    "id": "RULE-TURBIDITY-01",
+    "type": "threshold",
+    "path": "env.turbidity_ntu",
+    "operator": ">",
+    "value": 15.0,
+    "severity": "low",
+    "dedupe_window_sec": 300
+  },
+  {
+    "id": "RULE-TEMPERATURE-01",
+    "type": "threshold",
+    "path": "env.temperature_c",
+    "operator": ">",
+    "value": 8.0,
+    "severity": "low",
+    "dedupe_window_sec": 300
+  }
+]
