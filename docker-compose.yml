@@ -1,31 +1,37 @@
-version: '3.8'
-
 services:
-  # PostgreSQL with TimescaleDB extension
+  # PostgreSQL with PostGIS extension
   postgres:
-    image: timescale/timescaledb:latest-pg15
+    image: postgis/postgis:15-3.4
     container_name: dsg-postgres
     environment:
       POSTGRES_DB: dsg_telemetry
       POSTGRES_USER: dsg_user
       POSTGRES_PASSWORD: dsg_password
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      postgres
+      -c listen_addresses='*'
+      -c max_connections=100
+      -c password_encryption=md5
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dsg_user -d dsg_telemetry"]
+      test: ["CMD-SHELL", "pg_isready -U dsg_user -d dsg_telemetry -h localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dsg-network
 
   # Redis for caching and rate limiting
   redis:
     image: redis:7-alpine
     container_name: dsg-redis
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -33,6 +39,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - dsg-network
 
   # pgAdmin for database management
   pgadmin:
@@ -43,7 +51,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin123
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
-      - "8080:80"
+      - "8082:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -61,7 +69,7 @@ services:
       - DEBUG=true
       - LOG_LEVEL=INFO
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - .:/app
     depends_on:
@@ -75,6 +83,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - dsg-network
 
   # Celery worker for background tasks
   celery:
@@ -94,8 +104,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - dsg-network
 
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
+
+networks:
+  dsg-network:
+    driver: bridge

@@ -154,7 +154,7 @@ class StreamManager:
                 print(f"Error sending telemetry event: {e}")
                 await self.remove_telemetry_stream(key, request)
     
-    def get_active_streams(self) -> Dict[str, int]:
+    async def get_active_streams(self) -> Dict[str, int]:
         """Get count of active streams."""
         async with self._lock:
             return {

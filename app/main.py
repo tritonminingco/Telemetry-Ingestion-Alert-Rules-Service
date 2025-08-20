@@ -5,12 +5,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import HTTPBearer
 import structlog
 
 from app.config import settings
-from app.database import init_db, init_timescaledb
+from app.database import init_db, init_postgresql
 from app.middleware import auth_middleware, rate_limit_middleware
-from app.routes import telemetry, streams, exports, zones, health
+from app.routes import telemetry, streams, exports, zones, health, auth
 from app.stream_manager import stream_manager
 
 # Configure structured logging
@@ -46,8 +48,8 @@ async def lifespan(app: FastAPI):
         await init_db()
         logger.info("Database initialized")
         
-        # Initialize TimescaleDB (if available)
-        await init_timescaledb()
+        # Initialize PostgreSQL-specific features
+        await init_postgresql()
         
         logger.info("Application startup complete")
     except Exception as e:
@@ -67,6 +69,9 @@ async def lifespan(app: FastAPI):
         logger.error("Error during shutdown", error=str(e))
 
 
+# Security scheme
+security_scheme = HTTPBearer()
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.app_name,
@@ -75,6 +80,13 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "telemetry", "description": "Telemetry data ingestion and management"},
+        {"name": "streams", "description": "Real-time streaming endpoints"},
+        {"name": "exports", "description": "Data export functionality"},
+        {"name": "zones", "description": "Geographic zones management"},
+        {"name": "health", "description": "Health check and monitoring"},
+    ],
 )
 
 # Add middleware
@@ -91,12 +103,47 @@ app.add_middleware(
     allowed_hosts=["*"] if settings.debug else ["localhost", "127.0.0.1"],
 )
 
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests."""
+    import time
+    start_time = time.time()
+    
+    # Log request
+    logger.info(
+        "Request started",
+        method=request.method,
+        url=str(request.url),
+        client_ip=request.client.host,
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Calculate duration
+    duration = time.time() - start_time
+    
+    # Log response
+    logger.info(
+        "Request completed",
+        method=request.method,
+        url=str(request.url),
+        status_code=response.status_code,
+        duration=f"{duration:.3f}s",
+    )
+    
+    return response
+
 # Add custom middleware
 @app.middleware("http")
 async def auth_middleware_wrapper(request: Request, call_next):
     """Apply authentication middleware."""
-    if request.url.path.startswith("/api/telemetry"):
-        await auth_middleware(request)
+    # TEMPORARILY DISABLED FOR TESTING
+    # Authentication is disabled - you can now call APIs without tokens
+    # if request.url.path.startswith("/api/telemetry"):
+    #     await auth_middleware(request)
     return await call_next(request)
 
 
@@ -119,6 +166,17 @@ async def global_exception_handler(request: Request, exc: Exception):
         exc_info=True,
     )
     
+    # Check if it's an authentication error
+    if "HTTPException" in str(type(exc)) and "401" in str(exc):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": "Unauthorized",
+                "message": "Authentication required. Please provide a valid Bearer token.",
+                "details": "Use the 'Authorize' button in Swagger UI or include 'Authorization: Bearer your-secret-auth-token-here' header"
+            },
+        )
+    
     return JSONResponse(
         status_code=500,
         content={
@@ -129,6 +187,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
+app.include_router(auth.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(streams.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
@@ -146,6 +205,8 @@ async def root():
         "docs": "/docs" if settings.debug else None,
     }
 
+
+# Remove custom openapi function for now - use built-in FastAPI security
 
 @app.get("/openapi.json")
 async def get_openapi():

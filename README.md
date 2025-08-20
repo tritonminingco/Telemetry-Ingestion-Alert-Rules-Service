@@ -39,7 +39,7 @@ A high-performance backend service for AUV (Autonomous Underwater Vehicle) telem
 
 - Python 3.11+
 - Docker and Docker Compose
-- PostgreSQL 15+ (or TimescaleDB for better performance)
+- PostgreSQL 15+ with PostGIS extension
 - Redis (for caching and Celery)
 
 ## 🛠️ Installation
@@ -326,7 +326,7 @@ Monitor the service using:
 - **Health endpoints**: `/api/health/healthz` and `/api/health/readyz`
 - **Metrics endpoint**: `/api/health/metrics`
 - **Application logs**: Structured JSON logging
-- **Database metrics**: TimescaleDB hypertable performance
+- **Database metrics**: PostgreSQL performance and query statistics
 
 ## 🚀 Deployment
 

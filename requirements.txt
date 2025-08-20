@@ -1,3 +1,4 @@
+# Core dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
@@ -14,14 +15,25 @@ python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 httpx==0.25.2
+sse-starlette==1.8.2
+psutil==5.9.6
+
+# Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
+
+# Code quality
 black==23.11.0
 isort==5.12.0
 mypy==1.7.1
 pre-commit==3.6.0
-shapely==2.0.2
-geopandas==0.14.1
-pandas==2.1.4
-numpy==1.25.2
+
+# Data processing and geospatial (Python 3.12 compatible versions)
+setuptools>=68.0.0
+wheel>=0.40.0
+numpy>=1.24.0
+pandas>=2.0.0
+shapely>=2.0.0
+geoalchemy2>=0.14.0
+geopandas>=0.14.0

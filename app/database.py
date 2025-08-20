@@ -65,19 +65,24 @@ async def check_db_health() -> bool:
         return False
 
 
-async def init_timescaledb() -> None:
-    """Initialize TimescaleDB hypertable."""
+async def init_postgresql() -> None:
+    """Initialize PostgreSQL-specific features."""
     try:
         async with async_engine.begin() as conn:
-            # Create hypertable on telemetry.timestamp
+            # Create indexes for better performance
             await conn.execute(
                 text(
-                    "SELECT create_hypertable('telemetry', 'timestamp', if_not_exists => TRUE);"
+                    "CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp_auv_id ON telemetry (timestamp, auv_id);"
                 )
             )
-        print("✅ TimescaleDB hypertable initialized")
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_telemetry_auv_id_timestamp ON telemetry (auv_id, timestamp);"
+                )
+            )
+        print("✅ PostgreSQL indexes initialized")
     except Exception as e:
-        print(f"⚠️ TimescaleDB initialization failed (this is OK if not using TimescaleDB): {e}")
+        print(f"⚠️ PostgreSQL initialization failed: {e}")
 
 
 @asynccontextmanager

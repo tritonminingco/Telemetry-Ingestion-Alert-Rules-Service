@@ -72,7 +72,7 @@ class AlertRuleConfig(BaseModel):
     path: str = Field(..., description="Data path to evaluate")
     operator: str = Field(..., description="Comparison operator")
     value: float = Field(..., description="Threshold value")
-    severity: str = Field(..., regex="^(low|medium|high)$", description="Alert severity")
+    severity: str = Field(..., pattern="^(low|medium|high)$", description="Alert severity")
     dedupe_window_sec: int = Field(..., ge=0, description="Deduplication window in seconds")
     zone_type: Optional[str] = Field(None, description="Zone type for zone-based rules")
     max_minutes: Optional[int] = Field(None, ge=0, description="Maximum dwell time in minutes")

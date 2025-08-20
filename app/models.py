@@ -2,7 +2,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from geoalchemy2 import Geometry
+try:
+    from geoalchemy2 import Geometry
+    HAS_POSTGIS = True
+except ImportError:
+    HAS_POSTGIS = False
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -119,7 +124,7 @@ class Zone(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name = Column(String(200), nullable=False)
     zone_type = Column(String(50), nullable=False)
-    geom = Column(Geometry("POLYGON", srid=4326), nullable=False)
+    geom = Column(Geometry("POLYGON", srid=4326), nullable=False) if HAS_POSTGIS else Column(Text, nullable=False)
     max_dwell_minutes = Column(Integer, nullable=False, default=0)
     
     # Metadata
@@ -129,5 +134,4 @@ class Zone(Base):
     # Indexes
     __table_args__ = (
         Index("idx_zones_zone_type", "zone_type"),
-        Index("idx_zones_geom", "geom", postgresql_using="gist"),
     )

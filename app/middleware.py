@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.config import settings
+from app.routes.auth import is_valid_token
 
 # Rate limiting storage (in production, use Redis)
 rate_limit_storage: Dict[str, List[float]] = {}
@@ -27,7 +28,8 @@ class AuthMiddleware:
                 )
             
             token = auth_header.replace("Bearer ", "")
-            if token != settings.auth_token:
+            # Check both the original token and temporary tokens
+            if token != settings.auth_token and not is_valid_token(token):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid token",
