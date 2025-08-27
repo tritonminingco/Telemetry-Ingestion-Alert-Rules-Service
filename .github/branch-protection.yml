@@ -1,0 +1,52 @@
+# Branch Protection Configuration
+# This file documents the branch protection rules that should be applied
+# You can apply these rules using GitHub CLI or the GitHub web interface
+
+branches:
+  main:
+    required_status_checks:
+      strict: true
+      contexts:
+        - "test"
+        - "docker-build"
+        - "security-scan"
+    enforce_admins: true
+    required_pull_request_reviews:
+      required_approving_review_count: 2
+      dismiss_stale_reviews: true
+      require_code_owner_reviews: true
+      require_last_push_approval: true
+    restrictions:
+      users: []
+      teams: []
+    required_linear_history: true
+    allow_force_pushes: false
+    allow_deletions: false
+    block_creations: true
+    required_conversation_resolution: true
+
+  develop:
+    required_status_checks:
+      strict: true
+      contexts:
+        - "test"
+        - "docker-build"
+        - "security-scan"
+    enforce_admins: false
+    required_pull_request_reviews:
+      required_approving_review_count: 1
+      dismiss_stale_reviews: true
+      require_code_owner_reviews: false
+      require_last_push_approval: false
+    restrictions:
+      users: []
+      teams: []
+    required_linear_history: false
+    allow_force_pushes: false
+    allow_deletions: false
+    block_creations: false
+    required_conversation_resolution: true
+
+# Code Owners Configuration
+# This should be placed in CODEOWNERS file in .github/ directory
+# The actual CODEOWNERS file is located at .github/CODEOWNERS
