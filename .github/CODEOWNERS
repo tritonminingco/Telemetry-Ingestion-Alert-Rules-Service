@@ -1,0 +1,39 @@
+# Global code owners
+* @team-leads
+
+# Python application code
+*.py @team-leads
+app/ @team-leads
+tests/ @team-leads
+
+# Infrastructure and deployment
+Dockerfile @devops-team
+docker-compose.yml @devops-team
+docker-setup.sh @devops-team
+.github/ @devops-team
+
+# Dependencies and configuration
+requirements.txt @team-leads
+pyproject.toml @team-leads
+alembic.ini @team-leads
+alembic/ @team-leads
+
+# Documentation
+README.md @team-leads
+API_TESTING_GUIDE.md @team-leads
+*.md @team-leads
+
+# Environment and secrets
+.env.example @devops-team
+env.example @devops-team
+
+# Database
+init.sql @team-leads
+seeds/ @team-leads
+
+# Scripts
+scripts/ @team-leads
+install_deps.sh @devops-team
+
+# API specification
+openapi.yaml @team-leads
