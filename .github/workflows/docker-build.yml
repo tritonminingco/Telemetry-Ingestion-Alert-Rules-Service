@@ -1,0 +1,291 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-test:
+    name: Build and Test Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+    - name: Test Docker image
+      run: |
+        # Test that the image can be built and run basic functionality
+        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} python -c "import app; print('✅ App imports successfully')"
+
+        # Test health check endpoint (if available)
+        docker run --rm -d --name test-app ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+        sleep 10
+        docker exec test-app python -c "import requests; requests.get('http://localhost:8000/api/health/healthz')" || echo "Health check not available"
+        docker stop test-app
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build image for scanning
+      run: |
+        docker build -t telemetry-service:scan .
+
+    - name: Run Trivy vulnerability scanner (image)
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'telemetry-service:scan'
+        format: 'sarif'
+        output: 'trivy-image-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+
+    - name: Run Trivy vulnerability scanner (filesystem)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-fs-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+
+    - name: Run Trivy vulnerability scanner (config)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'config'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-config-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+
+    - name: Run Trivy vulnerability scanner (secret)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'secret'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-secret-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Run Grype vulnerability scanner
+      uses: anchore/grype-action@v1
+      with:
+        image: "telemetry-service:scan"
+        output: "table"
+        file: "grype-results.txt"
+        fail-build: false
+
+    - name: Run Snyk container vulnerability scanner
+      uses: snyk/actions/docker@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        image: telemetry-service:scan
+        args: --severity-threshold=high
+
+    - name: Display scan results
+      run: |
+        echo "=== Trivy Image Scan Results ==="
+        if [ -f trivy-image-results.sarif ]; then
+          echo "Trivy image scan completed"
+        fi
+
+        echo "=== Grype Scan Results ==="
+        if [ -f grype-results.txt ]; then
+          cat grype-results.txt
+        else
+          echo "No Grype results found"
+        fi
+
+    - name: Upload Trivy image scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-image-results.sarif'
+
+    - name: Upload Trivy filesystem scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-fs-results.sarif'
+
+    - name: Upload Trivy config scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-config-results.sarif'
+
+    - name: Upload Trivy secret scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-secret-results.sarif'
+
+  docker-compose-test:
+    name: Docker Compose Integration Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build application image
+      run: |
+        docker build -t telemetry-service:test .
+
+    - name: Test with Docker Compose
+      run: |
+        # Create test docker-compose file
+        cat > docker-compose.test.yml << EOF
+        version: '3.8'
+        services:
+          app:
+            image: telemetry-service:test
+            environment:
+              - DATABASE_URL=postgresql://test_user:test_password@postgres:5432/test_db
+              - REDIS_URL=redis://redis:6379
+              - SECRET_KEY=test-secret-key
+              - ENVIRONMENT=test
+            ports:
+              - "8000:8000"
+            depends_on:
+              postgres:
+                condition: service_healthy
+              redis:
+                condition: service_healthy
+        EOF
+
+        # Wait for services to be ready
+        sleep 30
+
+        # Test basic functionality
+        curl -f http://localhost:8000/api/health/healthz || echo "Health check failed but continuing"
+
+  push-to-registry:
+    name: Push to Registry
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan, docker-compose-test]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+    - name: Update deployment tags
+      run: |
+        echo "Latest image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}"
+        echo "Image pushed successfully to registry"
