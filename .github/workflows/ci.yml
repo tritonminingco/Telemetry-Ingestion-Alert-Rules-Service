@@ -126,19 +126,67 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Run Trivy vulnerability scanner
+    - name: Run Trivy vulnerability scanner (filesystem)
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: 'fs'
         scan-ref: '.'
         format: 'sarif'
-        output: 'trivy-results.sarif'
+        output: 'trivy-fs-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
 
-    - name: Upload Trivy scan results to GitHub Security tab
+    - name: Run Trivy vulnerability scanner (config)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'config'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-config-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+
+    - name: Run Trivy vulnerability scanner (secret)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'secret'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-secret-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy filesystem scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v2
       if: always()
       with:
-        sarif_file: 'trivy-results.sarif'
+        sarif_file: 'trivy-fs-results.sarif'
+
+    - name: Upload Trivy config scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-config-results.sarif'
+
+    - name: Upload Trivy secret scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-secret-results.sarif'
+
+    - name: Run Grype vulnerability scanner
+      uses: anchore/grype-action@v1
+      with:
+        image: "telemetry-service:test"
+        output: "table"
+        file: "grype-results.txt"
+        fail-build: false
+
+    - name: Display Grype results
+      run: |
+        if [ -f grype-results.txt ]; then
+          echo "=== Grype Vulnerability Scan Results ==="
+          cat grype-results.txt
+        else
+          echo "No Grype results found"
+        fi
 
   dependency-review:
     name: Dependency Review
